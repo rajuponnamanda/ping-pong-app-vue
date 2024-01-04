@@ -1,0 +1,74 @@
+parameters:
+  - name: buildName
+    type: string
+  - name: projectFolder
+    type: string
+  - name: buildOutputFolder
+    type: string
+  - name: vmImageName
+    type: string
+
+jobs:
+  - job: "build_test_${{ parameters.buildName }}"
+    displayName: "build  and test ${{ parameters.buildName }}"
+    pool:
+      vmImage: ${{ parameters.vmImageName}}
+    steps:
+
+      - task: Npm@1
+        displayName: npm install
+        inputs:
+          workingDir: ${{parameters.projectFolder}}
+          verbose: true
+
+      - task: Npm@1
+        displayName: build
+        inputs:
+          command: custom
+          workingDir: ${{parameters.projectFolder}}
+          verbose: true
+          customCommand: run build
+
+      - task: Npm@1
+        displayName: npm unit tests
+        inputs:
+          command: custom
+          workingDir: ${{parameters.projectFolder}}
+          verbose: true
+          customCommand: run coverage
+
+      - task: PublishTestResults@2
+        displayName: "Publish test results"
+        condition: succeededOrFailed()
+        inputs:
+          searchFolder: "${{parameters.projectFolder}}/test-results.xml"
+          testRunner: 'JUnit'
+          testResultsFormat: JUnit
+          testResultsFiles: "**/TESTS*.xml"
+
+      - task: PublishCodeCoverageResults@1
+        displayName: "Publish code coverage results"
+        condition: succeededOrFailed()
+        inputs:
+          codeCoverageTool: Cobertura
+          summaryFileLocation: '${{parameters.projectFolder}}/coverage/cobertura-coverage.xml'
+          reportDirectory: '${{parameters.projectFolder}}/coverage'
+          failIfCoverageEmpty: false
+
+      - task: CopyFiles@2
+        inputs:
+          sourceFolder: "${{parameters.buildOutputFolder}}"
+          contents: "**"
+          targetFolder: "${{parameters.buildOutputFolder}}"
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: "${{parameters.buildOutputFolder}}"
+          artifactName: drop
+
+      - task: DownloadBuildArtifacts@1
+        inputs:
+          buildType: "current"
+          downloadType: "single"
+          artifactName: "drop"
+          downloadPath: "${{parameters.buildOutputFolder}}"
